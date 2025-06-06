@@ -171,6 +171,15 @@ class TrackingEval:
                     value = float(np.nanmean(values))
                 metrics.add_label_metric(metric_name, class_name, value)
 
+            # # Add CI metrics.
+            # print('md.ci_evaluation ', md.ci_evaluation)
+            # print(type(md.ci_evaluation))
+            # for threshold, ci_values in md.ci_evaluation.items():
+            #     for ci, intervals in ci_values.items():
+            #         metric_name = f"CI_{ci}_at_threshold_{threshold:.4f}"
+            #         value = np.nanmean(intervals) if len(intervals) > 0 else np.nan
+            #         metrics.add_label_metric(metric_name, class_name, value)
+                    
         # Compute evaluation time.
         metrics.add_runtime(time.time() - start_time)
 

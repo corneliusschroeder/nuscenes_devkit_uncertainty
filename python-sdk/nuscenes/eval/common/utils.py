@@ -13,7 +13,7 @@ from nuscenes.utils.data_classes import Box
 DetectionBox = Any  # Workaround as direct imports lead to cyclic dependencies.
 
 
-def within_cofidence_interval(gt_box: EvalBox, pred_box: EvalBox, confidence: float, distribution = stats.norm):
+def within_confidence_interval(gt_box: EvalBox, pred_box: EvalBox, confidence: float, distribution = stats.norm):
     """
     Determines whether bounding box position (x, y) and extent (w, l) are within given confidence interval.
     :param gt_box: GT annotation sample.
@@ -29,10 +29,36 @@ def within_cofidence_interval(gt_box: EvalBox, pred_box: EvalBox, confidence: fl
     distance_from_mean = z_score * std_dev
     
     full_dist = np.abs(np.array(pred_box.translation) - np.array(gt_box.translation))
-    vel_difference = np.abs(np.array(pred_box.velocity) - np.array(gt_box.velocity))
+    bbox_dist = np.abs(np.array(pred_box.size) - np.array(gt_box.size))
 
-    return np.concatenate([full_dist[:2] <= distance_from_mean[:2], vel_difference <= distance_from_mean[7:]]) + 0 
+    if distance_from_mean.size == 0:
+        # print('dist_from_mean: ', distance_from_mean)
+        return np.array([0, 0, 0, 0])
+    return np.concatenate([full_dist[:2] <= distance_from_mean[:2], bbox_dist[:2] <= distance_from_mean[3:5]]) + 0 
 
+
+def within_confidence_interval_xy(gt_box: EvalBox, pred_box: EvalBox, confidence: float, distribution = stats.norm):
+    """
+    Determines whether bounding box position (x, y) is within given confidence interval.
+    :param gt_box: GT annotation sample.
+    :param pred_box: Predicted sample.
+    :confidence: Confidence percentage in (0; 1.0)
+    :distribution: Distribution that implements the percent point function (ppf) with mean 0 and variance 1.
+        Default: stats.norm (i.e. Normal Gaussian)
+    :return: Indicator 1 if position is within the confidence interval.
+    """
+    z_score = distribution.ppf((1 + confidence) / 2)
+    std_dev = np.sqrt(pred_box.uncertainty)
+    if len(std_dev) == 0:
+        return 0
+    a = z_score * std_dev[0]
+    b = z_score * std_dev[1]
+    dist = np.abs(np.array(pred_box.translation) - np.array(gt_box.translation)) 
+    if ((dist[0]/a) ** 2 + (dist[1]/b) ** 2) <= 1:
+        return 1
+    else:
+        return 0
+    
 
 def gaussian_nll_error(gt_box: EvalBox, pred_box: EvalBox) -> np.ndarray:
     """
@@ -46,9 +72,9 @@ def gaussian_nll_error(gt_box: EvalBox, pred_box: EvalBox) -> np.ndarray:
     log_uncertainties = np.log(uncertainties)
     
     full_dist = (np.array(pred_box.translation) - np.array(gt_box.translation)) ** 2
-    vel_diff = (np.array(pred_box.velocity) - np.array(gt_box.velocity)) ** 2
-    out_dist = np.concatenate([full_dist[:2], vel_diff])
-    return out_dist / uncertainties[[0, 1, 7, 8]] + log_uncertainties[[0, 1, 7, 8]]
+    bbox_dist = (np.array(pred_box.size) - np.array(gt_box.size)) ** 2
+    out_dist = np.concatenate([full_dist, bbox_dist])
+    return out_dist / uncertainties[:6] + log_uncertainties[:6]
 
 
 def center_distance(gt_box: EvalBox, pred_box: EvalBox) -> float:

@@ -17,12 +17,14 @@ import numpy as np
 import pandas
 import sklearn
 import tqdm
+from scipy import stats
 
 from nuscenes.eval.tracking.constants import MOT_METRIC_MAP, TRACKING_METRICS
 from nuscenes.eval.tracking.data_classes import TrackingBox, TrackingMetricData
 from nuscenes.eval.tracking.mot import MOTAccumulatorCustom
 from nuscenes.eval.tracking.render import TrackingRenderer
 from nuscenes.eval.tracking.utils import print_threshold_metrics, create_motmetrics
+from nuscenes.eval.common.utils import within_confidence_interval, within_confidence_interval_xy
 
 
 class TrackingEvaluation(object):
@@ -37,7 +39,9 @@ class TrackingEvaluation(object):
                  metric_worst: Dict[str, float],
                  verbose: bool = True,
                  output_dir: str = None,
-                 render_classes: List[str] = None):
+                 render_classes: List[str] = None,
+                 confidence_interval_values: List[float] = [0.1, 0.25, 0.5, 0.95],
+                 uncertainty_distribution = stats.norm):
         """
         Create a TrackingEvaluation object which computes all metrics for a given class.
         :param tracks_gt: The ground-truth tracks.
@@ -75,6 +79,11 @@ class TrackingEvaluation(object):
 
         self.n_scenes = len(self.tracks_gt)
 
+        self.confidence_interval_values = confidence_interval_values
+        self.uncertainty_distribution = uncertainty_distribution
+
+        self.ci_eval = {ci: [] for ci in self.confidence_interval_values}
+
         # Specify threshold naming pattern. Note that no two thresholds may have the same name.
         def name_gen(_threshold):
             return 'thr_%.4f' % _threshold
@@ -87,7 +96,7 @@ class TrackingEvaluation(object):
     def accumulate(self) -> TrackingMetricData:
         """
         Compute metrics for all recall thresholds of the current class.
-        :returns: TrackingMetricData instance which holds the metrics for each threshold.
+        :return: TrackingMetricData instance which holds the metrics for each threshold.
         """
         # Init.
         if self.verbose:
@@ -116,6 +125,7 @@ class TrackingEvaluation(object):
         # Note: The recall values are the hypothetical recall (10%, 20%, ..).
         # The actual recall may vary as there is no way to compute it without trying all thresholds.
         thresholds, recalls = self.compute_thresholds(gt_box_count)
+        
         md.confidence = thresholds
         md.recall_hypo = recalls
         if self.verbose:
@@ -150,14 +160,19 @@ class TrackingEvaluation(object):
         else:
             summary = pandas.concat(thresh_metrics)
 
-        # Sanity checks.
-        unachieved_thresholds = np.sum(np.isnan(thresholds))
-        duplicate_thresholds = len(thresholds) - len(np.unique(thresholds))
-        assert unachieved_thresholds + duplicate_thresholds + len(thresh_metrics) == self.num_thresholds
+        # Get the number of thresholds which were not achieved (i.e. nan).
+        unachieved_thresholds = np.array([t for t in thresholds if np.isnan(t)])
+        num_unachieved_thresholds = len(unachieved_thresholds)
 
-        # Figure out how many times each threshold should be repeated.
+        # Get the number of thresholds which were achieved (i.e. not nan).
         valid_thresholds = [t for t in thresholds if not np.isnan(t)]
         assert valid_thresholds == sorted(valid_thresholds)
+        num_duplicate_thresholds = len(valid_thresholds) - len(np.unique(valid_thresholds))
+
+        # Sanity check.
+        assert num_unachieved_thresholds + num_duplicate_thresholds + len(thresh_metrics) == self.num_thresholds
+
+        # Figure out how many times each threshold should be repeated.
         rep_counts = [np.sum(thresholds == t) for t in np.unique(valid_thresholds)]
 
         # Store all traditional metrics.
@@ -190,11 +205,27 @@ class TrackingEvaluation(object):
                 values = np.concatenate([([v] * r) for (v, r) in zip(values, rep_counts)])
 
                 # Pad values with nans for unachieved recall thresholds.
-                all_values = [np.nan] * unachieved_thresholds
+                all_values = [np.nan] * num_unachieved_thresholds
                 all_values.extend(values)
 
             assert len(all_values) == TrackingMetricData.nelem
             md.set_metric(metric_name, all_values)
+
+        # print(self.ci_eval.items())
+
+        # for threshold, ci_values in self.ci_eval.items():
+        #     for ci, interval in ci_values.items():
+        #         # Compute the mean confidence interval metric for each threshold and store it.
+        #         # print(type(intervals), intervals)
+                
+        #         interval_arr = np.array(interval)
+        #         if interval_arr.size == 0:
+        #             mean_ci_metric = [np.nan] * 4
+        #         else:
+        #             mean_ci_metric = np.mean(interval_arr, axis=0).tolist()
+        #         print(mean_ci_metric)
+        #         metric_name = f"CI_{ci}_at_threshold_{threshold:.4f}"
+        #         md.set_metric(metric_name, [mean_ci_metric] * TrackingMetricData.nelem)
 
         return md
 
@@ -254,7 +285,7 @@ class TrackingEvaluation(object):
                     gt_boxes = np.array([b.translation[:2] for b in frame_gt])
                     pred_boxes = np.array([b.translation[:2] for b in frame_pred])
                     distances = sklearn.metrics.pairwise.euclidean_distances(gt_boxes, pred_boxes)
-
+                   
                 # Distances that are larger than the threshold won't be associated.
                 assert len(distances) == 0 or not np.all(np.isnan(distances))
                 distances[distances >= self.dist_th_tp] = np.nan
@@ -270,6 +301,13 @@ class TrackingEvaluation(object):
                     match_ids = matches.HId.values
                     match_scores = [tt.tracking_score for tt in frame_pred if tt.tracking_id in match_ids]
                     scores.extend(match_scores)
+                    gt_ids = matches.OId.values
+                    
+                    for ci in self.confidence_interval_values:
+                        for i in range(len(match_ids)):               
+                            self.ci_eval[ci].append(within_confidence_interval_xy(
+                                frame_gt[i], frame_pred[i], ci, distribution=self.uncertainty_distribution))
+                    
                 else:
                     events = None
 
@@ -281,6 +319,25 @@ class TrackingEvaluation(object):
                 frame_id += 1
 
             accs.append(acc)
+
+        if threshold is None:
+            print("\nConfidence intervalls for class {0}".format(self.class_name))
+            # Write to a single file for all classes in eval_path directory
+            eval_path = getattr(self, "output_dir", None)
+            if eval_path is not None:
+                os.makedirs(eval_path, exist_ok=True)
+                out_file = os.path.join(eval_path, "confidence_intervals_all_classes.txt")
+                with open(out_file, "a") as f:  # Open in append mode
+                    f.write("Confidence intervalls for class {0}\n".format(self.class_name))
+                    for ci, values in self.ci_eval.items():
+                        empirical_mean = np.mean(values)
+                        print("CI {0:2f}: {1:8.4f}".format(ci, empirical_mean))
+                        f.write("CI {0:2f}: {1:8.4f}\n".format(ci, empirical_mean))
+                    f.write("\n")
+            else:
+                for ci, values in self.ci_eval.items():
+                    empirical_mean = np.mean(values)
+                    print("CI {0:2f}: {1:8.4f}".format(ci, empirical_mean))
 
         # Merge accumulators
         acc_merged = MOTAccumulatorCustom.merge_event_dataframes(accs)
