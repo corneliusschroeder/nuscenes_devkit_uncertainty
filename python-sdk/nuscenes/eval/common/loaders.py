@@ -47,7 +47,7 @@ def load_prediction(result_path: str, max_boxes_per_sample: int, box_cls, verbos
     for sample_token in all_results.sample_tokens:
         assert len(all_results.boxes[sample_token]) <= max_boxes_per_sample, \
             "Error: Only <= %d boxes per sample allowed!" % max_boxes_per_sample
-
+    
     return all_results, meta
 
 
@@ -61,8 +61,7 @@ def load_gt(nusc: NuScenes, eval_split: str, box_cls, verbose: bool = False) -> 
     :return: The GT boxes.
     """
     # Init.
-    if box_cls == DetectionBox:
-        attribute_map = {a['token']: a['name'] for a in nusc.attribute}
+    attribute_map = {a['token']: a['name'] for a in nusc.attribute}
 
     if verbose:
         print('Loading annotations for {} split from nuScenes version: {}'.format(eval_split, nusc.version))
@@ -113,21 +112,22 @@ def load_gt(nusc: NuScenes, eval_split: str, box_cls, verbose: bool = False) -> 
         for sample_annotation_token in sample_annotation_tokens:
 
             sample_annotation = nusc.get('sample_annotation', sample_annotation_token)
+
+            # Get attribute_name.
+            attr_tokens = sample_annotation['attribute_tokens']
+            attr_count = len(attr_tokens)
+            if attr_count == 0:
+                attribute_name = ''
+            elif attr_count == 1:
+                attribute_name = attribute_map[attr_tokens[0]]
+            else:
+                raise Exception('Error: GT annotations must not have more than one attribute!')
+            
             if box_cls == DetectionBox:
                 # Get label name in detection task and filter unused labels.
                 detection_name = category_to_detection_name(sample_annotation['category_name'])
                 if detection_name is None:
                     continue
-
-                # Get attribute_name.
-                attr_tokens = sample_annotation['attribute_tokens']
-                attr_count = len(attr_tokens)
-                if attr_count == 0:
-                    attribute_name = ''
-                elif attr_count == 1:
-                    attribute_name = attribute_map[attr_tokens[0]]
-                else:
-                    raise Exception('Error: GT annotations must not have more than one attribute!')
 
                 sample_boxes.append(
                     box_cls(
@@ -160,6 +160,7 @@ def load_gt(nusc: NuScenes, eval_split: str, box_cls, verbose: bool = False) -> 
                         rotation=sample_annotation['rotation'],
                         velocity=nusc.box_velocity(sample_annotation['token'])[:2],
                         num_pts=sample_annotation['num_lidar_pts'] + sample_annotation['num_radar_pts'],
+                        attribute_name=attribute_name,
                         tracking_id=tracking_id,
                         tracking_name=tracking_name,
                         tracking_score=-1.0  # GT samples do not have a score.

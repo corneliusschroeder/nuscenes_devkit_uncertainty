@@ -8,6 +8,7 @@ import numpy as np
 from nuscenes.eval.common.data_classes import MetricData, EvalBox
 from nuscenes.eval.common.utils import center_distance
 from nuscenes.eval.tracking.constants import TRACKING_NAMES, TRACKING_METRICS, AMOT_METRICS
+from nuscenes.eval.detection.constants import ATTRIBUTE_NAMES
 
 
 class TrackingConfig:
@@ -36,7 +37,8 @@ class TrackingConfig:
 
         TrackingMetricData.set_nelem(num_thresholds)
 
-        self.class_names = sorted(self.class_range.keys())
+        # self.class_names = sorted(self.class_range.keys())
+        self.class_names = self.class_range.keys()
 
     def __eq__(self, other):
         eq = True
@@ -265,12 +267,17 @@ class TrackingBox(EvalBox):
                  velocity: Tuple[float, float] = (0, 0),
                  ego_translation: [float, float, float] = (0, 0, 0),  # Translation to ego vehicle in meters.
                  num_pts: int = -1,  # Nbr. LIDAR or RADAR inside the box. Only for gt boxes.
+                 attribute_name: str = '',    # Only applies to GT
                  tracking_id: str = '',  # Instance id of this object.
                  tracking_name: str = '',  # The class name used in the tracking challenge.
                  tracking_score: float = -1.0,  # Does not apply to GT.
-                 uncertainty: List[float] = []): 
+                 uncertainty: List[float] = [] # Does not apply to GT.
+                 ): 
 
         super().__init__(sample_token, translation, size, rotation, velocity, num_pts)
+
+        # assert attribute_name in ATTRIBUTE_NAMES or attribute_name == None or attribute_name == '', \
+        #     'Error: Unknown attribute_name %s' % attribute_name
 
         assert len(ego_translation) == 3, 'Error: Translation must have 3 elements!'
         assert not np.any(np.isnan(ego_translation)), 'Error: Translation may not be NaN!'
@@ -287,6 +294,7 @@ class TrackingBox(EvalBox):
         self.tracking_name = tracking_name
         self.tracking_score = tracking_score
         self.uncertainty = uncertainty
+        self.attribute_name = attribute_name
 
     @ property
     def ego_dist(self) -> float:
@@ -303,7 +311,8 @@ class TrackingBox(EvalBox):
                 self.num_pts == other.num_pts and
                 self.tracking_id == other.tracking_id and
                 self.tracking_name == other.tracking_name and
-                self.tracking_score == other.tracking_score)
+                self.tracking_score == other.tracking_score and
+                self.attribute_name == other.attribute_name)
 
     def serialize(self) -> dict:
         """ Serialize instance into json-friendly format. """
@@ -317,6 +326,7 @@ class TrackingBox(EvalBox):
             'num_pts': self.num_pts,
             'tracking_id': self.tracking_id,
             'tracking_name': self.tracking_name,
+            'attribute_name': self.attribute_name,
             'tracking_score': self.tracking_score
         }
 
@@ -333,6 +343,7 @@ class TrackingBox(EvalBox):
                    num_pts=-1 if 'num_pts' not in content else int(content['num_pts']),
                    tracking_id=content['tracking_id'],
                    tracking_name=content['tracking_name'],
+                    attribute_name= None if 'attribute_name' not in content else content['attribute_name'],
                    tracking_score=-1.0 if 'tracking_score' not in content else float(content['tracking_score']),
                    uncertainty=content['covariance'])
 

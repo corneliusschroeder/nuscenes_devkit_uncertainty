@@ -36,6 +36,7 @@ class MOTAccumulatorCustom(motmetrics.mot.MOTAccumulator):
 
         idx = pd.MultiIndex.from_tuples(indices, names=['FrameId', 'Event'])
         df = pd.DataFrame(events, index=idx, columns=['Type', 'OId', 'HId', 'D'])
+        #df['mov_class_res'] = np.nan
         return df
 
     @staticmethod
@@ -51,6 +52,8 @@ class MOTAccumulatorCustom(motmetrics.mot.MOTAccumulator):
                 ('HId', pd.Series(dtype=object)),
                 # Hypothesis ID or NaN if MISS. Using float as missing values will be converted to NaN anyways.
                 ('D', pd.Series(dtype=float)),  # Distance or NaN when FP or MISS
+                ('mov_Pred', pd.Series(dtype=object)),   # Result of the movement classifier 
+                ('mov_GT', pd.Series(dtype=object)) # GT movement state
             ]),
             index=idx
         )
@@ -59,10 +62,43 @@ class MOTAccumulatorCustom(motmetrics.mot.MOTAccumulator):
     @property
     def events(self):
         if self.dirty_events:
-            self.cached_events_df = MOTAccumulatorCustom.new_event_dataframe_with_data(self._indices, self._events)
+            if hasattr(self, 'cached_events_df') and self.cached_events_df is not None:
+                # Save the movement classification results before regenerating
+                old_df = self.cached_events_df
+                has_movement_data = 'mov_Pred' in old_df.columns and old_df['mov_Pred'].notna().any()
+                
+                # Generate new DataFrame
+                self.cached_events_df = MOTAccumulatorCustom.new_event_dataframe_with_data(self._indices, self._events)
+                
+                # Restore movement classification results if they existed
+                if has_movement_data:
+                    # Create a mapping from old indices to movement results
+                    movement_Pred_map = {}
+                    movement_GT_map = {}
+
+                    for idx, value in old_df['mov_Pred'].items():
+                        if pd.notna(value):
+                            movement_Pred_map[idx] = value
+
+                    for idx, value in old_df['mov_GT'].items():
+                        if pd.notna(value):
+                            movement_GT_map[idx] = value
+                    
+                    # Apply the saved values to the new DataFrame
+                    for idx, value in movement_Pred_map.items():
+                        if idx in self.cached_events_df.index:
+                            self.cached_events_df.at[idx, 'mov_Pred'] = value
+
+                    for idx, value in movement_GT_map.items():
+                        if idx in self.cached_events_df.index:
+                            self.cached_events_df.at[idx, 'mov_GT'] = value
+            else:
+                # First time, just create the DataFrame
+                self.cached_events_df = MOTAccumulatorCustom.new_event_dataframe_with_data(self._indices, self._events)
+                
             self.dirty_events = False
         return self.cached_events_df
-
+    
     @staticmethod
     def merge_event_dataframes(dfs, update_frame_indices=True, update_oids=True, update_hids=True,
                                return_mappings=False):

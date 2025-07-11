@@ -26,6 +26,20 @@ from nuscenes.eval.tracking.render import TrackingRenderer
 from nuscenes.eval.tracking.utils import print_threshold_metrics, create_motmetrics
 from nuscenes.eval.common.utils import within_confidence_interval, within_confidence_interval_xy
 
+MOV_ATTRIBUTE_MAP = {
+    "vehicle.moving": "moving",
+    "vehicle.parked": "static",
+    "vehicle.stopped": "static",
+    "pedestrian.sitting_lying_down": "static",
+    "pedestrian.standing": "static",
+    "pedestrian.moving": "moving"
+}
+def get_movement_attribute(gt):
+    if gt.attribute_name in MOV_ATTRIBUTE_MAP:
+        return MOV_ATTRIBUTE_MAP[gt.attribute_name]
+    else:
+        return gt.attribute_name
+
 
 class TrackingEvaluation(object):
     def __init__(self,
@@ -143,6 +157,11 @@ class TrackingEvaluation(object):
 
             # Accumulate track data.
             acc, _ = self.accumulate_threshold(threshold)
+            # print('threshold: ', threshold)
+            # print(acc)
+            # import pandas as pd
+            # with pd.option_context('display.max_rows', None, 'display.max_columns', None):  # more options can be specified also
+            # print(acc[acc.Type == 'MATCH'])
             accumulators.append(acc)
 
             # Compute metrics for current threshold.
@@ -211,22 +230,6 @@ class TrackingEvaluation(object):
             assert len(all_values) == TrackingMetricData.nelem
             md.set_metric(metric_name, all_values)
 
-        # print(self.ci_eval.items())
-
-        # for threshold, ci_values in self.ci_eval.items():
-        #     for ci, interval in ci_values.items():
-        #         # Compute the mean confidence interval metric for each threshold and store it.
-        #         # print(type(intervals), intervals)
-                
-        #         interval_arr = np.array(interval)
-        #         if interval_arr.size == 0:
-        #             mean_ci_metric = [np.nan] * 4
-        #         else:
-        #             mean_ci_metric = np.mean(interval_arr, axis=0).tolist()
-        #         print(mean_ci_metric)
-        #         metric_name = f"CI_{ci}_at_threshold_{threshold:.4f}"
-        #         md.set_metric(metric_name, [mean_ci_metric] * TrackingMetricData.nelem)
-
         return md
 
     def accumulate_threshold(self, threshold: float = None) -> Tuple[pandas.DataFrame, List[float]]:
@@ -285,7 +288,7 @@ class TrackingEvaluation(object):
                     gt_boxes = np.array([b.translation[:2] for b in frame_gt])
                     pred_boxes = np.array([b.translation[:2] for b in frame_pred])
                     distances = sklearn.metrics.pairwise.euclidean_distances(gt_boxes, pred_boxes)
-                   
+                    
                 # Distances that are larger than the threshold won't be associated.
                 assert len(distances) == 0 or not np.all(np.isnan(distances))
                 distances[distances >= self.dist_th_tp] = np.nan
@@ -294,19 +297,53 @@ class TrackingEvaluation(object):
                 # Note that we cannot use timestamp as frameid as motmetrics assumes it's an integer.
                 acc.update(gt_ids, pred_ids, distances, frameid=frame_id)
 
+                events = acc.events.loc[frame_id]
+                matches = events[events.Type == 'MATCH']
+                # print('matches', matches)
+                match_ids = matches.HId.values
+                gt_ids = matches.OId.values
+                # print('match_ids ', match_ids)
+                # print('gt_id ', gt_ids)
+                matched_preds = []
+                matched_gt = []
+                for i in range(len(match_ids)):
+                    pred_id = match_ids[i]
+                    gt_id = gt_ids[i]
+                    pred_match = next((f for f in frame_pred if f.tracking_id == pred_id), None)
+                    gt_match = next((g for g in frame_gt if g.tracking_id == gt_id), None)
+                    if pred_match and gt_match:
+                        matched_preds.append(pred_match)
+                        matched_gt.append(gt_match)
+                # print('matched_preds: ',len(matched_preds), [(g.tracking_id, g.attribute_name) for g in matched_preds])
+                # print('matched_gt: ',len(matched_gt), [(g.tracking_id, g.attribute_name) for g in matched_gt])
+                
+                movement_states = [(pred.attribute_name, get_movement_attribute(gt))
+                                    for pred, gt in zip(matched_preds, matched_gt)]
+                # print('movement_TP: ', movement_TP)
+                # if frame_id == 5:
+                #     quit()
+                for i, (_, match_row) in enumerate(matches.iterrows()):
+                    if i < len(movement_states):  # Safety check to avoid index errors
+                        idx = (frame_id, match_row.name)
+                        acc.events.loc[idx, 'mov_Pred'] = movement_states[i][0]
+                        acc.events.loc[idx, 'mov_GT'] = movement_states[i][1]
+                
                 # Store scores of matches, which are used to determine recall thresholds.
                 if threshold is None:
+                    
                     events = acc.events.loc[frame_id]
                     matches = events[events.Type == 'MATCH']
                     match_ids = matches.HId.values
                     match_scores = [tt.tracking_score for tt in frame_pred if tt.tracking_id in match_ids]
                     scores.extend(match_scores)
                     gt_ids = matches.OId.values
-                    
-                    for ci in self.confidence_interval_values:
-                        for i in range(len(match_ids)):               
-                            self.ci_eval[ci].append(within_confidence_interval_xy(
-                                frame_gt[i], frame_pred[i], ci, distribution=self.uncertainty_distribution))
+                    # print(frame_gt)
+                    # gt_moving = [gt.]
+                    # print('match_ids: {0}, gt_ids: {1}'.format(match_ids, gt_ids))
+                    # for ci in self.confidence_interval_values:
+                    #     for i in range(len(match_ids)):               
+                    #         self.ci_eval[ci].append(within_confidence_interval_xy(
+                    #             frame_gt[i], frame_pred[i], ci, distribution=self.uncertainty_distribution))
                     
                 else:
                     events = None
@@ -317,31 +354,48 @@ class TrackingEvaluation(object):
 
                 # Increment the frame_id, unless there are no boxes (equivalent to what motmetrics does).
                 frame_id += 1
+        
+            # import pandas as pd
+
+            # Set display options to show all rows and columns
+            # pd.set_option('display.max_rows', None)
+            # pd.set_option('display.max_columns', None)
+            # pd.set_option('display.width', None)
+            # pd.set_option('display.max_colwidth', None)
+
+            # Write the DataFrame to a CSV file
+            # acc.events.to_csv('/workspaces/Poly-MOT/dataframe_export.csv')
+
+            # quit()
 
             accs.append(acc)
 
-        if threshold is None:
-            print("\nConfidence intervalls for class {0}".format(self.class_name))
-            # Write to a single file for all classes in eval_path directory
-            eval_path = getattr(self, "output_dir", None)
-            if eval_path is not None:
-                os.makedirs(eval_path, exist_ok=True)
-                out_file = os.path.join(eval_path, "confidence_intervals_all_classes.txt")
-                with open(out_file, "a") as f:  # Open in append mode
-                    f.write("Confidence intervalls for class {0}\n".format(self.class_name))
-                    for ci, values in self.ci_eval.items():
-                        empirical_mean = np.mean(values)
-                        print("CI {0:2f}: {1:8.4f}".format(ci, empirical_mean))
-                        f.write("CI {0:2f}: {1:8.4f}\n".format(ci, empirical_mean))
-                    f.write("\n")
-            else:
-                for ci, values in self.ci_eval.items():
-                    empirical_mean = np.mean(values)
-                    print("CI {0:2f}: {1:8.4f}".format(ci, empirical_mean))
+        # if threshold is None:
+        #     print("\nConfidence intervalls for class {0}".format(self.class_name))
+        #     # Write to a single file for all classes in eval_path directory
+        #     eval_path = getattr(self, "output_dir", None)
+        #     if eval_path is not None:
+        #         os.makedirs(eval_path, exist_ok=True)
+        #         out_file = os.path.join(eval_path, "confidence_intervals_all_classes.txt")
+        #         with open(out_file, "a") as f:  # Open in append mode
+        #             f.write("Confidence intervalls for class {0}\n".format(self.class_name))
+        #             for ci, values in self.ci_eval.items():
+        #                 empirical_mean = np.mean(values)
+        #                 print("CI {0:2f}: {1:8.4f}".format(ci, empirical_mean))
+        #                 f.write("CI {0:2f}: {1:8.4f}\n".format(ci, empirical_mean))
+        #             f.write("\n")
+        #     else:
+        #         for ci, values in self.ci_eval.items():
+        #             empirical_mean = np.mean(values)
+        #             print("CI {0:2f}: {1:8.4f}".format(ci, empirical_mean))
 
         # Merge accumulators
         acc_merged = MOTAccumulatorCustom.merge_event_dataframes(accs)
-
+        if threshold is None:
+            df_export_path = '/workspaces/Poly-MOT/jittering_module/results/z_scores/' + self.class_name + '_z_scores.csv'
+            df_matches = acc_merged[acc_merged.Type == 'MATCH']
+            df_matches.to_csv(df_export_path)
+        # quit()
         return acc_merged, scores
 
     def compute_thresholds(self, gt_box_count: int) -> Tuple[List[float], List[float]]:

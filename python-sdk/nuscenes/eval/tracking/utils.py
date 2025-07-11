@@ -10,7 +10,7 @@ from motmetrics.metrics import MetricsHost
 
 from nuscenes.eval.tracking.data_classes import TrackingMetrics
 from nuscenes.eval.tracking.metrics import motar, mota_custom, motp_custom, faf, track_initialization_duration, \
-    longest_gap_duration, num_fragmentations_custom
+    longest_gap_duration, num_fragmentations_custom, movement_accuracy, movement_precision, movement_recall
 
 
 def category_to_tracking_name(category_name: str) -> Optional[str]:
@@ -45,7 +45,7 @@ def metric_name_to_print_format(metric_name) -> str:
     :param metric_name: The lowercase metric name.
     :return: The print format.
     """
-    if metric_name in ['amota', 'amotp', 'motar', 'recall', 'mota', 'motp']:
+    if metric_name in ['amota', 'amotp', 'motar', 'recall', 'mota', 'motp', 'mov_acc', 'mov_prec', 'mov_rec']:
         print_format = '%.3f'
     elif metric_name in ['tid', 'lgd']:
         print_format = '%.2f'
@@ -168,5 +168,11 @@ def create_motmetrics() -> MetricsHost:
                 formatter='{:.2%}'.format, name='tid')
     mh.register(longest_gap_duration, ['obj_frequencies'],
                 formatter='{:.2%}'.format, name='lgd')
+    mh.register(movement_accuracy, None,
+                formatter='{:.2%}'.format, name='movement_accuracy')
+    mh.register(movement_precision, None,
+                formatter='{:.2%}'.format, name='movement_precision')
+    mh.register(movement_recall, None,
+                formatter='{:.2%}'.format, name='movement_recall')
 
     return mh

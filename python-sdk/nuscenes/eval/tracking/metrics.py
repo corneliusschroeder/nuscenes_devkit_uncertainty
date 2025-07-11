@@ -133,6 +133,41 @@ def motar(df: DataFrame, num_matches: int, num_misses: int, num_switches: int, n
 
     return motar_val
 
+def movement_accuracy(df: DataFrame) -> float:
+    """
+    Calculates the accuracy of the binary movement classifier. A 'moving' classification is consider a positive,
+    while 'static' corresponds to negative.
+    :param df: Motmetrics dataframe
+    :param num_matches: The number of matches.
+    """
+    num_tp = (df.match['mov_Pred'] == df.match['mov_GT']).sum()
+    num_matches = len(df.match)
+    acc = num_tp / num_matches
+    return acc
+
+def movement_precision(df: DataFrame) -> float:
+    """
+    Calculates the precision of the binary movement classifier. A 'moving' classification is consider a positive,
+    while 'static' corresponds to negative.
+    :param df: Motmetrics dataframe
+    """
+    num_tp = (df.match['mov_Pred'] == df.match['mov_GT']).sum()
+    num_fp = ((df.match['mov_Pred'] == 'moving') & (df.match['mov_GT'] == 'static')).sum()
+    prec = num_tp / (num_tp + num_fp)
+    return prec
+
+
+def movement_recall(df: DataFrame) -> float:
+    """
+    Calculates the recall of the binary movement classifier. A 'moving' classification is consider a positive,
+    while 'static' corresponds to negative.
+    :param df: Motmetrics dataframe
+    """
+    num_tp = (df.match['mov_Pred'] == df.match['mov_GT']).sum()
+    num_fn = ((df.match['mov_Pred'] == 'static') & (df.match['mov_GT'] == 'moving')).sum()
+    rec = num_tp / (num_tp + num_fn)
+    return rec
+
 
 def mota_custom(df: DataFrame, num_misses: int, num_switches: int, num_false_positives: int, num_objects: int) -> float:
     """
