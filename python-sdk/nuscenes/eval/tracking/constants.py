@@ -6,7 +6,7 @@ TRACKING_NAMES = ['bicycle', 'bus', 'car', 'motorcycle', 'pedestrian', 'trailer'
 AMOT_METRICS = ['amota', 'amotp']
 INTERNAL_METRICS = ['recall', 'motar', 'gt']
 LEGACY_METRICS = ['mota', 'motp', 'mt', 'ml', 'faf', 'tp', 'fp', 'fn', 'ids', 'frag', 'tid', 'lgd']
-CUSTOM_METRICS = ['mov_acc', 'mov_prec', 'mov_rec']
+CUSTOM_METRICS = [] # ['mov_acc', 'mov_prec', 'mov_rec']
 TRACKING_METRICS = [*AMOT_METRICS, *INTERNAL_METRICS, *LEGACY_METRICS, *CUSTOM_METRICS]
 
 PRETTY_TRACKING_NAMES = {
@@ -54,7 +54,7 @@ MOT_METRIC_MAP = {  # Mapping from motmetrics names to metric names used here.
     'recall': 'recall',
     'tid': 'tid',
     'lgd': 'lgd',
-    'movement_accuracy': 'mov_acc',
-    'movement_recall': 'mov_rec',
-    'movement_precision': 'mov_prec'
+    # 'movement_accuracy': 'mov_acc',
+    # 'movement_recall': 'mov_rec',
+    # 'movement_precision': 'mov_prec'
 }

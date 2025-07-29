@@ -314,18 +314,19 @@ class TrackingEvaluation(object):
                     if pred_match and gt_match:
                         matched_preds.append(pred_match)
                         matched_gt.append(gt_match)
-                # print('matched_preds: ',len(matched_preds), [(g.tracking_id, g.attribute_name) for g in matched_preds])
-                # print('matched_gt: ',len(matched_gt), [(g.tracking_id, g.attribute_name) for g in matched_gt])
                 
+                # Movement states from motion classifier 
                 movement_states = [(pred.attribute_name, get_movement_attribute(gt))
                                     for pred, gt in zip(matched_preds, matched_gt)]
-                # print('movement_TP: ', movement_TP)
-                # if frame_id == 5:
-                #     quit()
+                # Predicted velocity
+                pred_velocity = [np.sqrt(pred.velocity[0]**2+pred.velocity[1]**2) for pred in matched_preds]
+                
                 for i, (_, match_row) in enumerate(matches.iterrows()):
                     if i < len(movement_states):  # Safety check to avoid index errors
                         idx = (frame_id, match_row.name)
+                        
                         acc.events.loc[idx, 'mov_Pred'] = movement_states[i][0]
+                        acc.events.loc[idx, 'vel_Pred'] = pred_velocity[i]
                         acc.events.loc[idx, 'mov_GT'] = movement_states[i][1]
                 
                 # Store scores of matches, which are used to determine recall thresholds.
@@ -392,7 +393,9 @@ class TrackingEvaluation(object):
         # Merge accumulators
         acc_merged = MOTAccumulatorCustom.merge_event_dataframes(accs)
         if threshold is None:
-            df_export_path = '/workspaces/Poly-MOT/jittering_module/results/z_scores/' + self.class_name + '_z_scores.csv'
+            df_export_path = self.output_dir + '/' + self.class_name + '_pred_vel.csv'
+            export_path = os.path.dirname(df_export_path)
+            os.makedirs(export_path, exist_ok=True)
             df_matches = acc_merged[acc_merged.Type == 'MATCH']
             df_matches.to_csv(df_export_path)
         # quit()
