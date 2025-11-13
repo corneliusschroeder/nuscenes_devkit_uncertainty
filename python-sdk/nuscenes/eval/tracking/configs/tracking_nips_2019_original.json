@@ -35,5 +35,5 @@
     "mov_prec": 0,
     "mov_rec": 0
   },
-  "num_thresholds": 1
+  "num_thresholds": 40
 }

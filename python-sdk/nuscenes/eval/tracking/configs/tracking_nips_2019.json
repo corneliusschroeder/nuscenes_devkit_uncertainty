@@ -1,12 +1,12 @@
 {
   "class_range": {
-    "car": 50,
-    "truck": 50,
-    "bus": 50,
-    "trailer": 50,
-    "pedestrian": 40,
-    "motorcycle": 40,
-    "bicycle": 40
+    "car": 100,
+    "truck": 100,
+    "bus": 100,
+    "trailer": 100,
+    "pedestrian": 100,
+    "motorcycle": 100,
+    "bicycle": 100
   },
   
   "dist_fcn": "center_distance",
