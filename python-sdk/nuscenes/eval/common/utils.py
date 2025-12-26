@@ -15,9 +15,9 @@ DetectionBox = Any  # Workaround as direct imports lead to cyclic dependencies.
 MIN_VARIANCE = 1e-5
 
 
-def within_cofidence_interval(gt_box: EvalBox, pred_box: EvalBox, confidence: float, distribution = stats.norm):
+def within_cofidence_interval(gt_box: EvalBox, pred_box: EvalBox, confidence: float, distribution = stats.norm, period: float = 2*np.pi ):
     """
-    Determines whether bounding box position (x, y) and extent (v_x, v_y) are within given confidence interval.
+    Determines whether bounding box position (x, y) and extent (v_x, v_y) and rotation are within given confidence interval.
     :param gt_box: GT annotation sample.
     :param pred_box: Predicted sample.
     :confidence: Confidence percentage in (0; 1.0)
@@ -32,8 +32,10 @@ def within_cofidence_interval(gt_box: EvalBox, pred_box: EvalBox, confidence: fl
     
     full_dist = np.abs(np.array(pred_box.translation) - np.array(gt_box.translation))
     vel_difference = np.abs(np.array(pred_box.velocity) - np.array(gt_box.velocity))
+    orient_diff = np.array(yaw_diff(gt_box, pred_box, period))
 
-    return np.concatenate([full_dist[:2] <= distance_from_mean[:2], vel_difference <= distance_from_mean[7:]]) + 0 
+    return np.concatenate([full_dist[:2] <= distance_from_mean[:2], vel_difference <= distance_from_mean[7:], \
+                           orient_diff <= distance_from_mean[6]]) + 0 
 
 
 def gaussian_nll_error(gt_box: EvalBox, pred_box: EvalBox, epsilon: float=MIN_VARIANCE) -> np.ndarray:
@@ -202,6 +204,22 @@ def yaw_diff(gt_box: EvalBox, eval_box: EvalBox, period: float = 2*np.pi) -> flo
     yaw_est = quaternion_yaw(Quaternion(eval_box.rotation))
 
     return abs(angle_diff(yaw_gt, yaw_est, period))
+
+def yaw_diff_var(gt_box: EvalBox, pred_box: EvalBox, epsilon=MIN_VARIANCE) -> np.ndarray:
+    """
+    Returns the yaw angle difference variance between the orientation of two boxes.
+    :param gt_box: Ground truth box.
+    :param eval_box: Predicted box.
+    :param period: Periodicity in radians for assessing angle difference.
+    :return: Yaw angle difference in radians in [0, pi].
+    """
+    # [ x, y, z, w, l, h, rot, vx, vy ]
+    #   0  1  2  3  4  5   6    7   8
+    variances = np.array(pred_box.uncertainty)
+    # clip variances to avoid division by zero.
+    variances = np.clip(variances, a_min=epsilon, a_max=None)
+    # extract variances for velocity vx and vy.
+    return variances[6]
 
 
 def angle_diff(x: float, y: float, period: float):

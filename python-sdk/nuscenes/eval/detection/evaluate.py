@@ -183,7 +183,7 @@ class DetectionEval:
                 metrics.add_label_tp(class_name, metric_name, tp)
 
             # compute confidence intervals
-            axes = ['x', 'y', 'v_x', 'v_y']
+            axes = ['x', 'y', 'v_x', 'v_y', 'orient']
             for ci, interval in metric_data.ci_evaluation.items():
                 for i, axis in enumerate(axes): 
                     name = f"CI_{ci}_of_{axis}"
