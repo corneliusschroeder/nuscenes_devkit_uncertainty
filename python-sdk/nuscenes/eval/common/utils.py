@@ -35,7 +35,7 @@ def within_cofidence_interval(gt_box: EvalBox, pred_box: EvalBox, confidence: fl
     orient_diff = np.array(yaw_diff(gt_box, pred_box, period))
 
     return np.concatenate([full_dist[:2] <= distance_from_mean[:2], vel_difference <= distance_from_mean[7:], \
-                           orient_diff <= distance_from_mean[6]]) + 0 
+                           [orient_diff <= distance_from_mean[6]]]) + 0 
 
 
 def gaussian_nll_error(gt_box: EvalBox, pred_box: EvalBox, epsilon: float=MIN_VARIANCE) -> np.ndarray:
