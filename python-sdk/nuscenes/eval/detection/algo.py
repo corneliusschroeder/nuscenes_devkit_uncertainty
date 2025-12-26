@@ -437,7 +437,7 @@ def accumulate(
         calib_df_orient = regression_calibration_df(
             y_pred=match_data['yaw_err'],
             var_pred=match_data['yaw_var'],
-            y_true=np.zeros_like(match_data['orient_err']),
+            y_true=np.zeros_like(match_data['yaw_err']),
             n_bins=num_bins_calibration,
         )
 
