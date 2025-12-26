@@ -219,7 +219,7 @@ def yaw_diff_var(gt_box: EvalBox, pred_box: EvalBox, epsilon=MIN_VARIANCE) -> np
     # clip variances to avoid division by zero.
     variances = np.clip(variances, a_min=epsilon, a_max=None)
     # extract variances for velocity vx and vy.
-    return variances[6]
+    return np.array(variances[6])
 
 
 def angle_diff(x: float, y: float, period: float):

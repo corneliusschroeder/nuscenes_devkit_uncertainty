@@ -107,8 +107,8 @@ def accumulate(
     distribution = stats.laplace if uncertainty_distribution == 'laplace' else stats.norm
 
     ece_util_keys = [
-        'trans_err_x', 'trans_err_y', 'vel_err_x', 'vel_err_y', 'orient_err',
-        'trans_var_x', 'trans_var_y', 'vel_var_x', 'vel_var_y', 'orient_var'
+        'trans_err_x', 'trans_err_y', 'vel_err_x', 'vel_err_y', 'yaw_err',
+        'trans_var_x', 'trans_var_y', 'vel_var_x', 'vel_var_y', 'yaw_var'
     ]
 
     # match_data holds the extra metrics we calculate for each match.
@@ -269,12 +269,13 @@ def accumulate(
             match_data['trans_var_y'].append(y_var)
             match_data['vel_var_x'].append(vel_x_var)
             match_data['vel_var_y'].append(vel_y_var)
-            match_data['orient_var'].append(yaw_diff_var(gt_box_match, pred_box))
+            match_data['yaw_var'].append(yaw_diff_var(gt_box_match, pred_box))
             
 
             # Barrier orientation is only determined up to 180 degree. (For cones orientation is discarded later)
             period = np.pi if class_name == 'barrier' else 2 * np.pi
             match_data['orient_err'].append(yaw_diff(gt_box_match, pred_box, period=period))
+            match_data['yaw_err'].append(yaw_diff(gt_box_match, pred_box, period=period))
 
             for ci in confidence_interval_values:
                 match_data['ci_gauss_err'][ci].append(within_cofidence_interval(gt_box_match, pred_box, ci, distribution=distribution, period=period))
@@ -434,8 +435,8 @@ def accumulate(
         )
 
         calib_df_orient = regression_calibration_df(
-            y_pred=match_data['orient_err'],
-            var_pred=match_data['orient_var'],
+            y_pred=match_data['yaw_err'],
+            var_pred=match_data['yaw_var'],
             y_true=np.zeros_like(match_data['orient_err']),
             n_bins=num_bins_calibration,
         )
