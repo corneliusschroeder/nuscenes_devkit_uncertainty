@@ -141,7 +141,7 @@ class DetectionEval:
                     tp = calc_tp(metric_data, self.cfg.min_recall, metric_name)
                 metrics.add_label_tp(class_name, metric_name, tp)
 
-            axes = ['x', 'y', 'v_x', 'v_y']
+            axes = ['x', 'y', 'v_x', 'v_y', 'orient']
             for ci, interval in metric_data.ci_evaluation.items():
                 for i, axis in enumerate(axes): 
                     name = f"CI_{ci}_of_{axis}"

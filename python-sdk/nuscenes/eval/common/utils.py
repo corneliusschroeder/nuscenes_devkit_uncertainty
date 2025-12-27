@@ -13,9 +13,9 @@ from nuscenes.utils.data_classes import Box
 DetectionBox = Any  # Workaround as direct imports lead to cyclic dependencies.
 
 
-def within_cofidence_interval(gt_box: EvalBox, pred_box: EvalBox, confidence: float, distribution = stats.norm):
+def within_cofidence_interval(gt_box: EvalBox, pred_box: EvalBox, confidence: float, distribution = stats.norm, period: float = 2*np.pi ):
     """
-    Determines whether bounding box position (x, y) and extent (v_x, v_y) are within given confidence interval.
+    Determines whether bounding box position (x, y) and extent (v_x, v_y) and rotation are within given confidence interval.
     :param gt_box: GT annotation sample.
     :param pred_box: Predicted sample.
     :confidence: Confidence percentage in (0; 1.0)
@@ -30,8 +30,10 @@ def within_cofidence_interval(gt_box: EvalBox, pred_box: EvalBox, confidence: fl
     
     full_dist = np.abs(np.array(pred_box.translation) - np.array(gt_box.translation))
     vel_difference = np.abs(np.array(pred_box.velocity) - np.array(gt_box.velocity))
+    orient_diff = np.array(yaw_diff(gt_box, pred_box, period))
 
-    return np.concatenate([full_dist[:2] <= distance_from_mean[:2], vel_difference <= distance_from_mean[7:]]) + 0 
+    return np.concatenate([full_dist[:2] <= distance_from_mean[:2], vel_difference <= distance_from_mean[7:], \
+                           orient_diff <= distance_from_mean[6]]) + 0 
 
 
 def gaussian_nll_error(gt_box: EvalBox, pred_box: EvalBox) -> np.ndarray:
