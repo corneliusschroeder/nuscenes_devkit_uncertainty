@@ -85,6 +85,8 @@ def print_final_metrics(metrics: TrackingMetrics) -> None:
     # Print high-level metrics.
     print('\nAggregated results:')
     for metric_name in metric_names:
+        if metric_name == 'ci_bev':
+            continue
         val = metrics.compute_metric(metric_name, 'all')
         print_format = metric_name_to_print_format(metric_name)
         print('%s\t%s' % (metric_name.upper(), print_format % val))

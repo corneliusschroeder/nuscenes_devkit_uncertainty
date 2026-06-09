@@ -105,7 +105,7 @@ class TrackingMetricData(MetricData):
         self.frag = init
         self.tid = init
         self.lgd = init
-        
+        self.ci_bev = init
 
     def __eq__(self, other):
         eq = True

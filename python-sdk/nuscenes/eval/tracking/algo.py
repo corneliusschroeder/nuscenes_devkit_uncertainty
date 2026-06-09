@@ -24,7 +24,7 @@ from nuscenes.eval.tracking.data_classes import TrackingBox, TrackingMetricData
 from nuscenes.eval.tracking.mot import MOTAccumulatorCustom
 from nuscenes.eval.tracking.render import TrackingRenderer
 from nuscenes.eval.tracking.utils import print_threshold_metrics, create_motmetrics
-from nuscenes.eval.common.utils import within_confidence_interval, within_confidence_interval_xy
+from nuscenes.eval.common.utils import within_confidence_interval
 
 
 class TrackingEvaluation(object):
@@ -40,7 +40,7 @@ class TrackingEvaluation(object):
                  verbose: bool = True,
                  output_dir: str = None,
                  render_classes: List[str] = None,
-                 confidence_interval_values: List[float] = [0.1, 0.25, 0.5, 0.95],
+                 confidence_interval_values: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.9999],
                  uncertainty_distribution = stats.norm):
         """
         Create a TrackingEvaluation object which computes all metrics for a given class.
@@ -82,7 +82,10 @@ class TrackingEvaluation(object):
         self.confidence_interval_values = confidence_interval_values
         self.uncertainty_distribution = uncertainty_distribution
 
-        self.ci_eval = {ci: [] for ci in self.confidence_interval_values}
+        self.ci_eval = {}
+        for ci in self.confidence_interval_values:
+            self.ci_eval[ci] = []
+            self.ci_eval['yaw_' + str(ci)] = []
 
         # Specify threshold naming pattern. Note that no two thresholds may have the same name.
         def name_gen(_threshold):
@@ -293,7 +296,7 @@ class TrackingEvaluation(object):
                 # Accumulate results.
                 # Note that we cannot use timestamp as frameid as motmetrics assumes it's an integer.
                 acc.update(gt_ids, pred_ids, distances, frameid=frame_id)
-
+                
                 # Store scores of matches, which are used to determine recall thresholds.
                 if threshold is None:
                     events = acc.events.loc[frame_id]
@@ -302,11 +305,42 @@ class TrackingEvaluation(object):
                     match_scores = [tt.tracking_score for tt in frame_pred if tt.tracking_id in match_ids]
                     scores.extend(match_scores)
                     gt_ids = matches.OId.values
-                    
+                    ### debug
+                    # if len(match_ids) > 0:
+                    #     pred_boxes = []
+                    #     gt_boxes = []
+                    #     pred_trans = []
+                    #     gt_trans = []
+                        
+                    #     for i in range(len(match_ids)):
+                    #         pred_box_obj = next((tt for tt in frame_pred if tt.tracking_id == match_ids[i]), None)
+                    #         gt_box_obj = next((gt for gt in frame_gt if gt.tracking_id == gt_ids[i]), None)
+                            
+                    #         if pred_box_obj is not None and gt_box_obj is not None:
+                    #             pred_boxes.append(pred_box_obj)
+                    #             gt_boxes.append(gt_box_obj)
+                    #             pred_trans.append(pred_box_obj.translation)
+                    #             gt_trans.append(gt_box_obj.translation)
+                        
+                    #     if len(pred_trans) > 4:
+                    #         print("Prediction tracking IDs:", [box.tracking_id for box in pred_boxes])
+                    #         print("GT tracking IDs:", [box.tracking_id for box in gt_boxes])
+                            
+                    #         dists = np.array(pred_trans) - np.array(gt_trans)
+                    #         print("Distances (L2 norm):")
+                    #         print(np.linalg.norm(dists[:,:2], axis=1))
+                    #         acc.events.to_csv('/workspaces/Poly-MOT/events.csv', index=True)
+                    #         quit()
+                    ### debug end
                     for ci in self.confidence_interval_values:
-                        for i in range(len(match_ids)):               
-                            self.ci_eval[ci].append(within_confidence_interval_xy(
-                                frame_gt[i], frame_pred[i], ci, distribution=self.uncertainty_distribution))
+                        for i in range(len(match_ids)):
+                            pred_box_obj = next((tt for tt in frame_pred if tt.tracking_id == match_ids[i]), None)
+                            gt_box_obj = next((gt for gt in frame_gt if gt.tracking_id == gt_ids[i]), None)
+                            xy, omega = within_confidence_interval(
+                                gt_box_obj, pred_box_obj, ci, distribution=self.uncertainty_distribution)
+                            self.ci_eval[ci].append(xy)
+                            self.ci_eval['yaw_' + str(ci)].append(omega)
+                            
                     
                 else:
                     events = None
@@ -317,9 +351,9 @@ class TrackingEvaluation(object):
 
                 # Increment the frame_id, unless there are no boxes (equivalent to what motmetrics does).
                 frame_id += 1
-
+            
             accs.append(acc)
-
+        
         if threshold is None:
             print("\nConfidence intervalls for class {0}".format(self.class_name))
             # Write to a single file for all classes in eval_path directory
@@ -331,13 +365,13 @@ class TrackingEvaluation(object):
                     f.write("Confidence intervalls for class {0}\n".format(self.class_name))
                     for ci, values in self.ci_eval.items():
                         empirical_mean = np.mean(values)
-                        print("CI {0:2f}: {1:8.4f}".format(ci, empirical_mean))
-                        f.write("CI {0:2f}: {1:8.4f}\n".format(ci, empirical_mean))
+                        print("CI {}: {:8.4f}".format(ci, empirical_mean))
+                        f.write("CI {}: {:8.4f}\n".format(ci, empirical_mean))
                     f.write("\n")
             else:
                 for ci, values in self.ci_eval.items():
                     empirical_mean = np.mean(values)
-                    print("CI {0:2f}: {1:8.4f}".format(ci, empirical_mean))
+                    print("CI {}: {:8.4f}".format(ci, empirical_mean))
 
         # Merge accumulators
         acc_merged = MOTAccumulatorCustom.merge_event_dataframes(accs)

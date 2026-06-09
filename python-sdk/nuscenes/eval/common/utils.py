@@ -37,9 +37,9 @@ def within_confidence_interval(gt_box: EvalBox, pred_box: EvalBox, confidence: f
     return np.concatenate([full_dist[:2] <= distance_from_mean[:2], bbox_dist[:2] <= distance_from_mean[3:5]]) + 0 
 
 
-def within_confidence_interval_xy(gt_box: EvalBox, pred_box: EvalBox, confidence: float, distribution = stats.norm):
+def within_confidence_interval(gt_box: EvalBox, pred_box: EvalBox, confidence: float, distribution = stats.norm, period = 2*np.pi):
     """
-    Determines whether bounding box position (x, y) is within given confidence interval.
+    Determines whether bounding box position (x, y) and orientation is within given confidence interval.
     :param gt_box: GT annotation sample.
     :param pred_box: Predicted sample.
     :confidence: Confidence percentage in (0; 1.0)
@@ -47,18 +47,24 @@ def within_confidence_interval_xy(gt_box: EvalBox, pred_box: EvalBox, confidence
         Default: stats.norm (i.e. Normal Gaussian)
     :return: Indicator 1 if position is within the confidence interval.
     """
+    scale_factor = np.sqrt(-2 * np.log(1 - confidence))
     z_score = distribution.ppf((1 + confidence) / 2)
     std_dev = np.sqrt(pred_box.uncertainty)
     if len(std_dev) == 0:
-        return 0
-    a = z_score * std_dev[0]
-    b = z_score * std_dev[1]
+        return 0, 0
+    # Confidence ellipse for position
+    a = scale_factor * std_dev[0]
+    b = scale_factor * std_dev[1]
     dist = np.abs(np.array(pred_box.translation) - np.array(gt_box.translation)) 
-    if ((dist[0]/a) ** 2 + (dist[1]/b) ** 2) <= 1:
-        return 1
+    if ((dist[0]/a)**2 + (dist[1]/b)**2 <= 1):
+        trans = 1
     else:
-        return 0
-    
+        trans = 0
+    # Univariate gaussian for yaw
+    distance_from_mean = z_score * std_dev
+    orient_diff = yaw_diff(gt_box, pred_box, period)
+    yaw = orient_diff <= distance_from_mean[6]
+    return trans, yaw
 
 def gaussian_nll_error(gt_box: EvalBox, pred_box: EvalBox) -> np.ndarray:
     """
