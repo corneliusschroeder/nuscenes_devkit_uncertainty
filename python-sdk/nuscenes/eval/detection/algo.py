@@ -18,7 +18,7 @@ def accumulate(gt_boxes: EvalBoxes,
                dist_fcn: Callable,
                dist_th: float,
                verbose: bool = False,
-               confidence_interval_values: List[float] = [0.1, 0.25, 0.5, 0.95],
+               confidence_interval_values: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
                uncertainty_distribution: str = "gaussian") -> DetectionMetricData:
     """
     Average Precision over predefined different recall thresholds for a single distance threshold.

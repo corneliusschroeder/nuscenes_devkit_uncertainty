@@ -13,9 +13,9 @@ from nuscenes.utils.data_classes import Box
 DetectionBox = Any  # Workaround as direct imports lead to cyclic dependencies.
 
 
-def within_confidence_interval(gt_box: EvalBox, pred_box: EvalBox, confidence: float, distribution = stats.norm):
+def within_cofidence_interval(gt_box: EvalBox, pred_box: EvalBox, confidence: float, distribution = stats.norm, period: float = 2*np.pi ):
     """
-    Determines whether bounding box position (x, y) and extent (w, l) are within given confidence interval.
+    Determines whether bounding box position (x, y) and extent (v_x, v_y) and rotation are within given confidence interval.
     :param gt_box: GT annotation sample.
     :param pred_box: Predicted sample.
     :confidence: Confidence percentage in (0; 1.0)
@@ -29,12 +29,11 @@ def within_confidence_interval(gt_box: EvalBox, pred_box: EvalBox, confidence: f
     distance_from_mean = z_score * std_dev
     
     full_dist = np.abs(np.array(pred_box.translation) - np.array(gt_box.translation))
-    bbox_dist = np.abs(np.array(pred_box.size) - np.array(gt_box.size))
+    vel_difference = np.abs(np.array(pred_box.velocity) - np.array(gt_box.velocity))
+    orient_diff = np.array(yaw_diff(gt_box, pred_box, period))
 
-    if distance_from_mean.size == 0:
-        # print('dist_from_mean: ', distance_from_mean)
-        return np.array([0, 0, 0, 0])
-    return np.concatenate([full_dist[:2] <= distance_from_mean[:2], bbox_dist[:2] <= distance_from_mean[3:5]]) + 0 
+    return np.concatenate([full_dist[:2] <= distance_from_mean[:2], vel_difference <= distance_from_mean[7:], \
+                           orient_diff <= distance_from_mean[6]]) + 0 
 
 
 def within_confidence_interval(gt_box: EvalBox, pred_box: EvalBox, confidence: float, distribution = stats.norm, period = 2*np.pi):
