@@ -36,6 +36,35 @@ def within_cofidence_interval(gt_box: EvalBox, pred_box: EvalBox, confidence: fl
                            orient_diff <= distance_from_mean[6]]) + 0 
 
 
+def within_confidence_interval(gt_box: EvalBox, pred_box: EvalBox, confidence: float, distribution = stats.norm, period = 2*np.pi):
+    """
+    Determines whether bounding box position (x, y) and orientation is within given confidence interval.
+    :param gt_box: GT annotation sample.
+    :param pred_box: Predicted sample.
+    :confidence: Confidence percentage in (0; 1.0)
+    :distribution: Distribution that implements the percent point function (ppf) with mean 0 and variance 1.
+        Default: stats.norm (i.e. Normal Gaussian)
+    :return: Indicator 1 if position is within the confidence interval.
+    """
+    scale_factor = np.sqrt(-2 * np.log(1 - confidence))
+    z_score = distribution.ppf((1 + confidence) / 2)
+    std_dev = np.sqrt(pred_box.uncertainty)
+    if len(std_dev) == 0:
+        return 0, 0
+    # Confidence ellipse for position
+    a = scale_factor * std_dev[0]
+    b = scale_factor * std_dev[1]
+    dist = np.abs(np.array(pred_box.translation) - np.array(gt_box.translation)) 
+    if ((dist[0]/a)**2 + (dist[1]/b)**2 <= 1):
+        trans = 1
+    else:
+        trans = 0
+    # Univariate gaussian for yaw
+    distance_from_mean = z_score * std_dev
+    orient_diff = yaw_diff(gt_box, pred_box, period)
+    yaw = orient_diff <= distance_from_mean[6]
+    return trans, yaw
+
 def gaussian_nll_error(gt_box: EvalBox, pred_box: EvalBox) -> np.ndarray:
     """
     Gaussian negative log-likelihood metric for position and bbox parameters
@@ -48,9 +77,9 @@ def gaussian_nll_error(gt_box: EvalBox, pred_box: EvalBox) -> np.ndarray:
     log_uncertainties = np.log(uncertainties)
     
     full_dist = (np.array(pred_box.translation) - np.array(gt_box.translation)) ** 2
-    vel_diff = (np.array(pred_box.velocity) - np.array(gt_box.velocity)) ** 2
-    out_dist = np.concatenate([full_dist[:2], vel_diff])
-    return out_dist / uncertainties[[0, 1, 7, 8]] + log_uncertainties[[0, 1, 7, 8]]
+    bbox_dist = (np.array(pred_box.size) - np.array(gt_box.size)) ** 2
+    out_dist = np.concatenate([full_dist, bbox_dist])
+    return out_dist / uncertainties[:6] + log_uncertainties[:6]
 
 
 def center_distance(gt_box: EvalBox, pred_box: EvalBox) -> float:
